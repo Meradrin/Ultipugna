@@ -1,0 +1,3 @@
+[submodule "external/genesis-plus-gx"]
+	path = external/genesis-plus-gx
+	url = https://github.com/Meradrin/Genesis-Plus-GX
