@@ -3,6 +3,8 @@
 #include <iostream>
 #include <SDL.h>
 #include <SDL_opengl.h>
+
+#include "config_tms7000.h"
 #include "imgui.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
@@ -15,6 +17,7 @@
 #include "UI/RenderWindow.h"
 #include "UI/ShortcutAndMenuUtils.h"
 #include "UI/UIManager.h"
+#include "Util/Config.h"
 
 static std::array<std::unique_ptr<IEmulatorCore>, 1> EmulatorCores =
 {
@@ -86,6 +89,7 @@ void StopEmulatorCore()
         UIManager::Get().OnEmulationCoreStop();
         CurrentEmulatorCore->Shutdown();
         CurrentEmulatorCore = nullptr;
+        IEmulatorCore::SetCurrent(nullptr);
         CurrentEmulatorLastTick = 0.0;
     }
 }
@@ -100,10 +104,11 @@ void StartEmulatorCore(IEmulatorCore* Core)
     if (Core != nullptr)
     {
         CurrentEmulatorCore = Core;
+        IEmulatorCore::SetCurrent(CurrentEmulatorCore);
         CurrentEmulatorLastTick = SDL_GetPerformanceCounter();
-        UIManager::Get().OnEmulationCoreStart(Core);
         CurrentEmulatorCore->SetAudioCallback(&PushAudioCallback);
         CurrentEmulatorCore->Initialize();
+        UIManager::Get().OnEmulationCoreStart(Core);
 
     }
 }
@@ -122,10 +127,10 @@ IMGUI_UTIL_CREATE_MENU_ITEM("File@0->Open@0", ImGuiMod_Ctrl | ImGuiKey_O, "Open 
         return Filters;
     }();
 
-    ImGuiUtil_OpenModalFileDialog("Open ROM", AllFilters, ".", [](const std::string_view& Key)
+    ImGuiUtil_OpenModalFileDialog("Open ROM", AllFilters, Config::Instance().Get("File.LastOpenPath", "."), [](const std::string_view& Key)
     {
         std::string Filter = ImGuiFileDialog::Instance()->GetCurrentFilter();
-        auto ItCore = std::ranges::find_if(EmulatorCores, [&Filter](const std::unique_ptr<IEmulatorCore>& Core)
+        const auto ItCore = std::ranges::find_if(EmulatorCores, [&Filter](const std::unique_ptr<IEmulatorCore>& Core)
         {
             return Core != nullptr && Core->GetMediaFilter(0).starts_with(Filter);
         });
@@ -139,6 +144,13 @@ IMGUI_UTIL_CREATE_MENU_ITEM("File@0->Open@0", ImGuiMod_Ctrl | ImGuiKey_O, "Open 
             {
                 StopEmulatorCore();
             }
+            else
+            {
+                Config::Instance()["File.LastOpenPath"] = ImGuiFileDialog::Instance()->GetCurrentPath();
+                Config::Instance()["File.LastOpenFullpath"] = FullPath;
+                Config::Instance().Save();
+                UIManager::Get().OnEmulationMediaOpen(0, FullPath);
+            }
         }
     });
 }
@@ -148,7 +160,7 @@ IMGUI_UTIL_CREATE_MENU_ITEM("File->Exit", ImGuiMod_Alt | ImGuiKey_F4, "")
     ExitApp = true;
 }
 
-#ifdef DEBUG
+#if DEBUG_BUILD
 static bool ShowDemoWindow = false;
 
 IMGUI_UTIL_CREATE_MENU_ITEM("About->Show Debug", ImGuiKey_None, "")
@@ -239,6 +251,7 @@ int main(int, char**)
         return -1;
     }
 
+    Config::Instance().Load();
     InitAudio();
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
@@ -333,7 +346,7 @@ int main(int, char**)
 
         UIManager::Get().Render();
 
-#ifdef DEBUG
+#if DEBUG_BUILD
         if (ShowDemoWindow)
         {
             ImGui::ShowDemoWindow(&ShowDemoWindow);

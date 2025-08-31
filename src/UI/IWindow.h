@@ -10,8 +10,11 @@ public:
 
     virtual std::uint64_t TypeId() = 0;
 
-    virtual void OnEmulationCoreStart(IEmulatorCore* emulator) = 0;
-    virtual void OnEmulationCoreStop() = 0;
+    virtual void OnEmulationCoreStart(IEmulatorCore* Emulator);
+    virtual void OnEmulationCoreStop();
+
+    virtual void OnEmulationMediaOpen(std::uint32_t MediaSource, const std::string& MediaPath);
+    virtual void OnEmulationMediaClose(std::uint32_t MediaSource);
 
     virtual ImGuiKeyChord GetDisplayShortcutKey() { return ImGuiKey_None; }
     virtual const std::string& Title() = 0;

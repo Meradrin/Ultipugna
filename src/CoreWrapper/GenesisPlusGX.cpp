@@ -342,3 +342,71 @@ std::error_code GenesisPlusGX::LoadState(std::span<const std::byte> StateData)
 {
     return {};
 }
+
+const std::vector<MemoryRegion>& GenesisPlusGX::GetMemoryRegions() const
+{
+    static MemoryRegion Main68k =
+    {
+        "Main 68K CPU Bus",
+        24,
+        0,
+        0xffffff,
+        [](std::uint64_t Address) -> std::byte
+        {
+            cpu_memory_map& Bank = m68k.memory_map[(Address >> 16) & 0xff];
+
+            if (Bank.base != nullptr)
+                return static_cast<std::byte>(Bank.base[(Address ^ 1) & 0xffff]);
+
+            return {};
+        },
+        [&](std::uint64_t Address, std::byte Value)
+        {
+            cpu_memory_map& Bank = m68k.memory_map[(Address >> 16) & 0xff];
+
+            if (Bank.base != nullptr)
+                Bank.base[(Address ^ 1) & 0xffff] = static_cast<std::uint8_t>(Value);
+        },
+    };
+
+    static MemoryRegion Sub68k =
+    {
+        "Sub 68K CPU Bus",
+        24,
+        0,
+        0xffffff,
+        [](std::uint64_t Address) -> std::byte
+        {
+           cpu_memory_map& Bank = s68k.memory_map[((Address)>>16)&0xff];
+
+           if (Bank.base != nullptr)
+               return static_cast<std::byte>(Bank.base[(Address ^ 1) & 0xffff]);
+
+           return {};
+        },
+        [&](std::uint64_t Address, std::byte Value)
+        {
+           cpu_memory_map& Bank = s68k.memory_map[((Address)>>16)&0xff];
+
+           if (Bank.base != nullptr)
+               Bank.base[(Address ^ 1) & 0xffff] = static_cast<std::uint8_t>(Value);
+        },
+    };
+
+    static std::vector<MemoryRegion> MegaCD = { Main68k, Sub68k };
+    static std::vector<MemoryRegion> Genesis = { Main68k };
+    static std::vector<MemoryRegion> SMS = {  };
+
+    if (system_hw == SYSTEM_MCD)
+        return MegaCD;
+
+    if ((system_hw & SYSTEM_PBC) == SYSTEM_MD)
+        return Genesis;
+
+    return IEmulatorCore::GetMemoryRegions();
+}
+
+const std::vector<CPUDescription>& GenesisPlusGX::GetCPUs() const
+{
+    return IEmulatorCore::GetCPUs();
+}

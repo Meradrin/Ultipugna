@@ -24,6 +24,9 @@ class GenesisPlusGX : public IEmulatorCore
     [[nodiscard]] virtual std::vector<std::byte> SaveState() const override;
     virtual std::error_code LoadState(std::span<const std::byte> StateData) override;
 
+    [[nodiscard]] virtual const std::vector<MemoryRegion>& GetMemoryRegions() const override;
+    [[nodiscard]] virtual const std::vector<CPUDescription>& GetCPUs() const override;
+
 private:
     std::vector<std::uint32_t> m_FrameBuffer;
 };

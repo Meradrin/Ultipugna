@@ -19,6 +19,8 @@ public:
 
     void OnEmulationCoreStart(IEmulatorCore* emulator);
     void OnEmulationCoreStop();
+    void OnEmulationMediaOpen(std::uint32_t MediaSource, const std::string& MediaPath);
+    void OnEmulationMediaClose(std::uint32_t MediaSource);
 
     template<typename WindowType, typename... Args>
     WindowType& AddWindow(Args&&... args)
@@ -73,7 +75,10 @@ private:
     void OnNewWindow(IWindow& Window);
     void OnRemoveWindow(IWindow& Window);
 
+    void RenderToolbar(const ImGuiViewport* Viewport, float MenuFrameHeight, float ToolbarHeight);
+
     static UIManager Instance;
 
+    bool ShowToolbar = false;
     std::vector<std::unique_ptr<IWindow>> Windows;
 };
