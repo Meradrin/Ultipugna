@@ -3,6 +3,7 @@
 #include <functional>
 
 #include "MemoryViewerWindow.h"
+#include "TileViewerWindow.h"
 #include "UI/LogWindow.h"
 #include "UI/RenderWindow.h"
 #include "UI/ShortcutAndMenuUtils.h"
@@ -14,6 +15,7 @@ void UIManager::Initialize()
     AddWindow<RenderWindow>(0);
     AddWindow<LogWindow>();
     AddWindow<MemoryViewerWindow>();
+    AddWindow<TileViewerWindow>();
 }
 
 void UIManager::Render()
@@ -60,6 +62,7 @@ void UIManager::Stop()
     RemoveWindow<RenderWindow>();
     RemoveWindow<LogWindow>();
     RemoveWindow<MemoryViewerWindow>();
+    RemoveWindow<TileViewerWindow>();
 }
 
 void UIManager::OnEmulationCoreStart(IEmulatorCore* EmulatorCore)
@@ -117,9 +120,15 @@ void UIManager::RenderToolbar(const ImGuiViewport* Viewport, float MenuFrameHeig
 
     if (ImGui::Begin("ToolbarOverlay", nullptr, ToolbarFlags))
     {
-        //if (ImGui::Button("Play")) { /* ... */ }
-        //ImGui::SameLine();
-        //if (ImGui::Button("Pause")) { /* ... */ }
+        if (ImGui::Button("Play"))
+        {
+
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Pause"))
+        {
+
+        }
         //ImGui::SameLine();
         //if (ImGui::Button("Step")) { /* ... */ }
         //ImGui::SameLine();

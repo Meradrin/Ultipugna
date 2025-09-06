@@ -6,6 +6,9 @@
 
 void Config::SetArray(const std::string& Key, const std::vector<std::string>& Values)
 {
+    const std::string StartKey = Key + "[";
+    erase_if(Data, [&StartKey](const auto& KeyValue) { return KeyValue.first.starts_with(StartKey); });
+
     for (std::size_t Index = 0; Index < Values.size(); ++Index)
     {
         std::stringstream KeyStream;
@@ -41,7 +44,7 @@ void Config::Save() const
 
         for (const auto& [FullKey, Value] : Data)
         {
-            std::string_view Section = "";
+            std::string_view Section;
             std::string_view Key = FullKey;
 
             if (const std::size_t Index = FullKey.rfind('.'); Index != std::string::npos)

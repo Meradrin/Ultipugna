@@ -27,3 +27,5 @@ void ImGuiUtil_OpenModalFileDialog(const std::string& Title, const std::string& 
     static void Name(); \
     static bool CONCAT(IsAdded_, Name) = ImGuiUtil_AddMenuItem(Path, HotKeys, Description, &Name); \
     static void Name()
+
+bool ImGuiUtil_ComboAutoWidth(const char* Label, int* CurrentItem, const char* ItemsZeroSep, int HeightItems = -1);

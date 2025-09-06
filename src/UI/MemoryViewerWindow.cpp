@@ -1,5 +1,6 @@
 #include "MemoryViewerWindow.h"
 
+#include "UI/ShortcutAndMenuUtils.h"
 #include "Util/ImGuiMathUtil.h"
 
 std::uint64_t MemoryViewerWindow::TypeId()
@@ -24,6 +25,7 @@ void MemoryViewerWindow::OnEmulationCoreStop()
 {
     MemEditorState.ReadCallback = nullptr;
     MemEditorState.WriteCallback = nullptr;
+    MemRegion = nullptr;
 }
 
 const std::string& MemoryViewerWindow::Title()
@@ -46,7 +48,8 @@ void MemoryViewerWindow::Render()
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Memory Region:");
         ImGui::SameLine();
-        ImGui::Combo("##SelectedMemoryRegion", &SelectedMemoryRegion, MemoryRegionNames.c_str());
+        ImGuiUtil_ComboAutoWidth("##SelectedMemoryRegion", &SelectedMemoryRegion, MemoryRegionNames.c_str());
+        ImGui::Separator();
 
         ImGui::BeginHexEditor("HexEditor", &MemEditorState);
 

@@ -4,6 +4,8 @@
 
 class GenesisPlusGX : public IEmulatorCore
 {
+    virtual const std::string& Name() const override;
+
     virtual void Initialize() override;
     virtual void Shutdown() override;
     virtual void Reset(bool Hard) override;
@@ -21,11 +23,15 @@ class GenesisPlusGX : public IEmulatorCore
     virtual double GetRefreshUpdate() override;
     virtual void DoFrame() override;
 
+    [[nodiscard]] virtual const std::map<std::string, SettingType>& GetSettingsTypes() const override;
+
     [[nodiscard]] virtual std::vector<std::byte> SaveState() const override;
     virtual std::error_code LoadState(std::span<const std::byte> StateData) override;
 
     [[nodiscard]] virtual const std::vector<MemoryRegion>& GetMemoryRegions() const override;
     [[nodiscard]] virtual const std::vector<CPUDescription>& GetCPUs() const override;
+
+    [[nodiscard]] virtual const std::vector<std::array<std::uint32_t, 256>>& GetTilePreviewPalettes() const override;
 
 private:
     std::vector<std::uint32_t> m_FrameBuffer;

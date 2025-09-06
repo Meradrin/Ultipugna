@@ -9,6 +9,9 @@ class Config
 public:
     static Config& Instance() { static Config Instance; return Instance; }
 
+    Config(const Config&) = delete;
+    Config& operator=(const Config&) = delete;
+
     [[nodiscard]] std::string& operator[](const std::string& Key) { return Data[Key]; }
     [[nodiscard]] const std::string& operator[](const std::string& Key) const { return Data.at(Key); }
     [[nodiscard]] bool HasKey(const std::string& Key) const { return Data.contains(Key); }
@@ -22,8 +25,6 @@ public:
 
 private:
     Config();
-    Config(const Config&) = delete;
-    Config& operator=(const Config&) = delete;
 
     std::map<std::string, std::string> Data;
     std::string FilePath;

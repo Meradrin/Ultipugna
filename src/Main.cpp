@@ -4,7 +4,6 @@
 #include <SDL.h>
 #include <SDL_opengl.h>
 
-#include "config_tms7000.h"
 #include "imgui.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
@@ -23,6 +22,7 @@ static std::array<std::unique_ptr<IEmulatorCore>, 1> EmulatorCores =
 {
     std::make_unique<GenesisPlusGX>(),
 };
+
 static IEmulatorCore* CurrentEmulatorCore = nullptr;
 static std::uint64_t CurrentEmulatorLastTick = 0;
 static bool ExitApp = false;
@@ -113,6 +113,75 @@ void StartEmulatorCore(IEmulatorCore* Core)
     }
 }
 
+void StartEmulationWithMedia(const std::string& FullMediaPath, const std::string& Filter);
+
+void UpdateRecentMenuItems()
+{
+    static std::vector<std::string> RecentFiles;
+    Config::Instance().GetArray("File.RecentFiles", RecentFiles);
+
+    ImGuiUtil_RemoveMenuItem("File->Recent Files");
+    std::int32_t PriorityOrder = 10;
+
+    for (const std::string& RecentFile : RecentFiles)
+    {
+        const std::size_t Split = RecentFile.find('|');
+        const std::string FullPath = RecentFile.substr(0, Split);
+        const std::string Filter = RecentFile.substr(Split + 1);
+
+        std::stringstream RecentFilesString;
+        RecentFilesString << "File->Recent Files@5->" << std::filesystem::path{FullPath}.filename().string() << '@' << (--PriorityOrder);
+        ImGuiUtil_AddMenuItem(RecentFilesString.str(), ImGuiKey_None, FullPath, [RecentFile]()
+        {
+            const std::size_t RecentSplitIndex = RecentFile.find('|');
+            const std::string RecentFullPath = RecentFile.substr(0, RecentSplitIndex);
+            const std::string RecentFilter = RecentFile.substr(RecentSplitIndex + 1);
+            StartEmulationWithMedia(RecentFullPath, RecentFilter);
+        });
+    }
+}
+
+void StartEmulationWithMedia(const std::string& FullMediaPath, const std::string& Filter)
+{
+    const auto ItCore = std::ranges::find_if(EmulatorCores, [&Filter](const std::unique_ptr<IEmulatorCore>& Core)
+    {
+        return Core != nullptr && Core->GetMediaFilter(0).starts_with(Filter);
+    });
+
+    if (ItCore != EmulatorCores.end())
+    {
+        StartEmulatorCore(ItCore->get());
+        using FilePath = std::filesystem::path;
+
+        if (CurrentEmulatorCore != nullptr && CurrentEmulatorCore->InsertMediaSource(FullMediaPath, 0) != std::error_code{})
+        {
+            StopEmulatorCore();
+        }
+        else
+        {
+            std::vector<std::string> LastOpenFiles;
+            Config::Instance().GetArray("File.RecentFiles", LastOpenFiles);
+            const std::string FullMediaPathAndFilter = FullMediaPath + '|' + Filter;
+
+            if (const auto Itr = std::ranges::find(LastOpenFiles.begin(), LastOpenFiles.end(), FullMediaPathAndFilter); Itr != LastOpenFiles.end())
+                LastOpenFiles.erase(Itr);
+
+            LastOpenFiles.push_back(FullMediaPathAndFilter);
+
+            while (LastOpenFiles.size() > 5)
+                LastOpenFiles.erase(LastOpenFiles.begin());
+
+            Config::Instance().SetArray("File.RecentFiles", LastOpenFiles);
+            Config::Instance()["File.LastOpenPath"] = ImGuiFileDialog::Instance()->GetCurrentPath();
+            Config::Instance().Save();
+
+            UIManager::Get().OnEmulationMediaOpen(0, FullMediaPath);
+
+            UpdateRecentMenuItems();
+        }
+    }
+}
+
 IMGUI_UTIL_CREATE_MENU_ITEM("File@0->Open@0", ImGuiMod_Ctrl | ImGuiKey_O, "Open a media source for a emulator code.")
 {
     static std::string AllFilters = []()
@@ -129,35 +198,153 @@ IMGUI_UTIL_CREATE_MENU_ITEM("File@0->Open@0", ImGuiMod_Ctrl | ImGuiKey_O, "Open 
 
     ImGuiUtil_OpenModalFileDialog("Open ROM", AllFilters, Config::Instance().Get("File.LastOpenPath", "."), [](const std::string_view& Key)
     {
-        std::string Filter = ImGuiFileDialog::Instance()->GetCurrentFilter();
-        const auto ItCore = std::ranges::find_if(EmulatorCores, [&Filter](const std::unique_ptr<IEmulatorCore>& Core)
-        {
-            return Core != nullptr && Core->GetMediaFilter(0).starts_with(Filter);
-        });
-
-        if (ItCore != EmulatorCores.end())
-        {
-            StartEmulatorCore(ItCore->get());
-            using FilePath = std::filesystem::path;
-            const std::string FullPath = (FilePath{ImGuiFileDialog::Instance()->GetCurrentPath()} / FilePath{ImGuiFileDialog::Instance()->GetCurrentFileName()}).string();
-            if (CurrentEmulatorCore != nullptr && CurrentEmulatorCore->InsertMediaSource(FullPath, 0) != std::error_code{})
-            {
-                StopEmulatorCore();
-            }
-            else
-            {
-                Config::Instance()["File.LastOpenPath"] = ImGuiFileDialog::Instance()->GetCurrentPath();
-                Config::Instance()["File.LastOpenFullpath"] = FullPath;
-                Config::Instance().Save();
-                UIManager::Get().OnEmulationMediaOpen(0, FullPath);
-            }
-        }
+        using FilePath = std::filesystem::path;
+        const std::string FullPath = (FilePath{ImGuiFileDialog::Instance()->GetCurrentPath()} / FilePath{ImGuiFileDialog::Instance()->GetCurrentFileName()}).string();
+        const std::string Filter = ImGuiFileDialog::Instance()->GetCurrentFilter();
+        StartEmulationWithMedia(FullPath, Filter);
     });
 }
 
-IMGUI_UTIL_CREATE_MENU_ITEM("File->Exit", ImGuiMod_Alt | ImGuiKey_F4, "")
+IMGUI_UTIL_CREATE_MENU_ITEM("File@0->|Exit", ImGuiMod_Alt | ImGuiKey_F4, "")
 {
     ExitApp = true;
+}
+
+ImGuiID SettingsWindowID;
+
+void ShowSettingsWindow()
+{
+    SettingsWindowID = ImGui::GetID("Settings");
+
+    if (ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        static char Filter[512] = "";
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("Filter:");
+        ImGui::SameLine();
+        ImGui::PushItemWidth(650);
+        ImGui::InputText("##FilterSetting", Filter, IM_ARRAYSIZE(Filter));
+        ImGui::PopItemWidth();
+        ImGui::Separator();
+
+        ImGui::BeginChild("LeftPane", ImVec2(200.0f, 400.0f), ImGuiChildFlags_None);
+        ImGui::PushItemWidth(-FLT_MIN);
+        const float ContentAvailableY = ImGui::GetContentRegionAvail().y;
+
+        std::vector<std::string> CategoryNames =
+        {
+            "Video",
+            "Audio",
+        };
+
+        for (const std::unique_ptr<IEmulatorCore>& Emulator : EmulatorCores)
+        {
+            if (!Emulator->GetSettingsTypes().empty())
+            {
+                CategoryNames.insert(CategoryNames.begin(), "Core " + Emulator->Name());
+            }
+        }
+
+        static std::size_t CurrentCategory = 0;
+
+        if (ImGui::BeginListBox("##SettingsSection", ImVec2(-FLT_MIN, ContentAvailableY)))
+        {
+            for (std::size_t Index = 0; Index < CategoryNames.size(); ++Index)
+            {
+                if (const bool Selected = (CurrentCategory == Index); ImGui::Selectable(CategoryNames[Index].c_str(), Selected))
+                    CurrentCategory = Index;
+            }
+            ImGui::EndListBox();
+        }
+
+        ImGui::PopItemWidth();
+        ImGui::EndChild();
+
+        ImGui::SameLine();
+
+        ImGui::BeginChild("RightPane", ImVec2(500.0f, 400.0f), ImGuiChildFlags_None);
+        ImGui::SetWindowFontScale(2.0f);
+        ImGui::TextUnformatted(CategoryNames[CurrentCategory].c_str());
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::Separator();
+
+        if (CurrentCategory < EmulatorCores.size())
+        {
+            for (const auto& [Name, Type] : EmulatorCores[CurrentCategory]->GetSettingsTypes())
+            {
+                std::string ConfigKey = "Core." + EmulatorCores[CurrentCategory]->Name() + "." + Name;
+
+                ImGui::Dummy(ImVec2(10.0f, 0.0f));
+                ImGui::TextUnformatted((Name + ":").c_str());
+                ImGui::SameLine();
+
+                switch (Type)
+                {
+                    case SettingType::Boolean:
+                    {
+                        bool Value = Config::Instance().Get(ConfigKey, "False") == "True";
+                        ImGui::Checkbox(("##" + Name).c_str(), &Value);
+                        Config::Instance()[ConfigKey] = Value ? "True" : "False";
+                        break;
+                    }
+                    case SettingType::Integer:
+                    {
+                        int Value = std::stoi(Config::Instance().Get(ConfigKey, "0"));
+                        ImGui::InputInt(("##" + Name).c_str(), &Value);
+                        Config::Instance()[ConfigKey] = std::to_string(Value);
+                        break;
+                    }
+                    case SettingType::String:
+                    {
+                        std::string CurrentValue = Config::Instance().Get(ConfigKey, "");
+                        char Text[512] = "";
+                        std::copy_n(CurrentValue.c_str(), std::min(CurrentValue.size(), sizeof(Text) - 1), Text);
+                        Text[std::min(CurrentValue.size(), sizeof(Text) - 1)] = '\0';
+                        ImGui::InputText(("##" + Name).c_str(), Text, IM_ARRAYSIZE(Text));
+                        Config::Instance()[ConfigKey] = Text;
+                        break;
+                    }
+                    case SettingType::Float:
+                    {
+                        float Value = std::stof(Config::Instance().Get(ConfigKey, "0.0"));
+                        ImGui::InputFloat(("##" + Name).c_str(), &Value);
+                        Config::Instance()[ConfigKey] = std::to_string(Value);
+                        break;
+                    }
+                    case SettingType::Directory:
+                    {
+                        std::string CurrentValue = Config::Instance().Get(ConfigKey, "");
+                        char Text[512] = "";
+                        std::copy_n(CurrentValue.c_str(), std::min(CurrentValue.size(), sizeof(Text) - 1), Text);
+                        Text[std::min(CurrentValue.size(), sizeof(Text) - 1)] = '\0';
+                        ImGui::InputText(("##" + Name).c_str(), Text, IM_ARRAYSIZE(Text));
+                        Config::Instance()[ConfigKey] = Text;
+                        break;
+                    }
+                    case SettingType::File:
+                    {
+                        std::string CurrentValue = Config::Instance().Get(ConfigKey, "");
+                        char Text[512] = "";
+                        std::copy_n(CurrentValue.c_str(), std::min(CurrentValue.size(), sizeof(Text) - 1), Text);
+                        Text[std::min(CurrentValue.size(), sizeof(Text) - 1)] = '\0';
+                        ImGui::InputText(("##" + Name).c_str(), Text, IM_ARRAYSIZE(Text));
+                        Config::Instance()[ConfigKey] = Text;
+                        break;
+                    }
+                }
+            }
+        }
+        ImGui::EndChild();
+
+        ImGui::Separator();
+        if (ImGui::Button("Close"))
+        {
+            Config::Instance().Save();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
 }
 
 #if DEBUG_BUILD
@@ -243,6 +430,11 @@ void SetThemeStyle()
     style.PopupBorderSize = 0.f;
 }
 
+IMGUI_UTIL_CREATE_MENU_ITEM("File->|Settings@3", ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiKey_S, "")
+{
+    ImGui::OpenPopup(SettingsWindowID);
+}
+
 int main(int, char**)
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0)
@@ -299,6 +491,7 @@ int main(int, char**)
     ImGui_ImplOpenGL3_Init("#version 150");
 
     UIManager::Get().Initialize();
+    UpdateRecentMenuItems();
 
     const std::uint64_t OneSecondFrequency = SDL_GetPerformanceFrequency();
 
@@ -345,6 +538,7 @@ int main(int, char**)
         }
 
         UIManager::Get().Render();
+        ShowSettingsWindow();
 
 #if DEBUG_BUILD
         if (ShowDemoWindow)

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <span>
 #include <system_error>
 #include <vector>
@@ -23,6 +24,11 @@ struct MemoryRegion
     std::uint64_t EndAddress ;
     std::function<std::byte(std::uint64_t)> Read;
     std::function<void(std::uint64_t, std::byte)> Write;
+};
+
+struct TileInfo
+{
+    std::function<std::vector<std::array<std::uint32_t, 256>>()> GetPreview;
 };
 
 struct RegisterDescription
@@ -52,6 +58,16 @@ struct CPUDescription
     std::function<std::string(std::uint64_t Address, std::uint64_t Flags)> FormatedDisassemble;
 };
 
+enum class SettingType
+{
+    String,
+    Integer,
+    Float,
+    Boolean,
+    Directory,
+    File,
+};
+
 class IEmulatorCore
 {
 public:
@@ -59,6 +75,8 @@ public:
     static void SetCurrent(IEmulatorCore* Core);
 
     virtual ~IEmulatorCore() = default;
+
+    [[nodiscard]] virtual const std::string& Name() const = 0;
 
     virtual void Initialize() = 0;
     virtual void Shutdown() = 0;
@@ -83,8 +101,15 @@ public:
     [[nodiscard]] virtual std::vector<std::byte> SaveState() const = 0;
     virtual std::error_code LoadState(std::span<const std::byte> state_data) = 0;
 
+    [[nodiscard]] virtual const std::map<std::string, SettingType>& GetSettingsTypes() const = 0;
+
+    [[nodiscard]] const std::string& GetSettingValue(const std::string& SettingName) const;
+    void SetSettingValue(const std::string& SettingName, const std::string& Value) const;
+
     [[nodiscard]] virtual const std::vector<MemoryRegion>& GetMemoryRegions() const;
     [[nodiscard]] virtual const std::vector<CPUDescription>& GetCPUs() const;
+
+    [[nodiscard]] virtual const std::vector<std::array<std::uint32_t, 256>>& GetTilePreviewPalettes() const;
 
 protected:
     RenderCallback RenderFunc = nullptr;

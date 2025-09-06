@@ -1,6 +1,9 @@
 #include "GenesisPlusGX.h"
 
+#include <filesystem>
+
 #include "SDL.h"
+#include "Util/Config.h"
 
 extern "C"
 {
@@ -217,6 +220,12 @@ int sdl_input_update()
     return 1;
 }
 
+const std::string& GenesisPlusGX::Name() const
+{
+    static std::string Name = "Genesis Plus GX";
+    return Name;
+}
+
 void GenesisPlusGX::Initialize()
 {
     // set default config
@@ -257,10 +266,19 @@ std::error_code GenesisPlusGX::InsertMediaSource(std::string_view Path, int Medi
     bitmap.data = reinterpret_cast<uint8*>(m_FrameBuffer.data());
     bitmap.viewport.changed = 3;
 
+    const std::filesystem::path CurrentPath = std::filesystem::current_path();
+    const std::string BiosFolderKey = "Core." + Name() + ".Bios Folder";
+    const std::string BiosFolder = Config::Instance().Get(BiosFolderKey, CurrentPath.string());
+
+    if (std::filesystem::exists(BiosFolder) && std::filesystem::is_directory(BiosFolder))
+        std::filesystem::current_path(BiosFolder);
+
     if(!load_rom(const_cast<char*>(Path.data())))
     {
         return std::make_error_code(std::errc::invalid_argument);
     }
+
+    std::filesystem::current_path(CurrentPath);
 
     audio_init(48000, 0);
     system_init();
@@ -333,6 +351,15 @@ void GenesisPlusGX::DoFrame()
     }
 }
 
+const std::map<std::string, SettingType>& GenesisPlusGX::GetSettingsTypes() const
+{
+    static std::map<std::string, SettingType> SettingsTypes = {
+        { "Bios Folder", SettingType::Directory },
+    };
+
+    return SettingsTypes;
+}
+
 std::vector<std::byte> GenesisPlusGX::SaveState() const
 {
     return std::vector<std::byte>();
@@ -393,8 +420,56 @@ const std::vector<MemoryRegion>& GenesisPlusGX::GetMemoryRegions() const
         },
     };
 
-    static std::vector<MemoryRegion> MegaCD = { Main68k, Sub68k };
-    static std::vector<MemoryRegion> Genesis = { Main68k };
+    static MemoryRegion VPDVRAM =
+    {
+        "VDP VRAM",
+        16,
+        0,
+        0xffff,
+        [](std::uint64_t Address) -> std::byte
+        {
+            return static_cast<std::byte>(vram[Address ^ 1]);
+        },
+        [&](std::uint64_t Address, std::byte Value)
+        {
+            vram[Address ^ 1] = static_cast<uint8>(Value);
+        },
+    };
+
+    static MemoryRegion VPDCRAM =
+    {
+        "VDP CRAM",
+        8,
+        0,
+        0x7f,
+        [](std::uint64_t Address) -> std::byte
+        {
+            return static_cast<std::byte>(cram[Address]);
+        },
+        [&](std::uint64_t Address, std::byte Value)
+        {
+            cram[Address] = static_cast<uint8>(Value);
+        },
+    };
+
+    static MemoryRegion VPDVSRAM =
+    {
+        "VDP VSRAM",
+        8,
+        0,
+        0x7f,
+        [](std::uint64_t Address) -> std::byte
+        {
+            return static_cast<std::byte>(vsram[Address]);
+        },
+        [&](std::uint64_t Address, std::byte Value)
+        {
+            vsram[Address] = static_cast<uint8>(Value);
+        },
+    };
+
+    static std::vector<MemoryRegion> MegaCD = { Main68k, Sub68k, VPDVRAM, VPDCRAM, VPDVSRAM };
+    static std::vector<MemoryRegion> Genesis = { Main68k, VPDVRAM, VPDCRAM, VPDVSRAM };
     static std::vector<MemoryRegion> SMS = {  };
 
     if (system_hw == SYSTEM_MCD)
@@ -409,4 +484,29 @@ const std::vector<MemoryRegion>& GenesisPlusGX::GetMemoryRegions() const
 const std::vector<CPUDescription>& GenesisPlusGX::GetCPUs() const
 {
     return IEmulatorCore::GetCPUs();
+}
+
+const std::vector<std::array<std::uint32_t, 256>>& GenesisPlusGX::GetTilePreviewPalettes() const
+{
+    static std::vector<std::array<std::uint32_t, 256>> ColorPalettes;
+    ColorPalettes.resize(4);
+    std::size_t PaletteIndex = 0;
+    for (auto& Palettes : ColorPalettes)
+    {
+        for (std::size_t ColorIndex = 0; ColorIndex < 16; ColorIndex++)
+        {
+            constexpr std::uint32_t ColorValues[] = {0, 52, 87, 116, 144, 172, 206, 255};
+            const std::size_t ColorMemAddress = PaletteIndex * 16 + ColorIndex;
+            const std::uint16_t* ColorWord = reinterpret_cast<uint16_t*>(cram) + ColorMemAddress;
+
+            Palettes[ColorIndex] = ColorValues[(*ColorWord) & 7];
+            Palettes[ColorIndex] |= ColorValues[(*ColorWord >> 3) & 7] << 8;
+            Palettes[ColorIndex] |= ColorValues[(*ColorWord >> 6) & 7] << 16;
+            Palettes[ColorIndex] |= 0xff << 24;
+        }
+
+        ++PaletteIndex;
+    }
+
+    return ColorPalettes;
 }

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <ranges>
@@ -21,6 +22,7 @@ namespace
         MenuCallback Callback = nullptr;
         std::vector<MenuNode> Children;
         bool* IsSelected = nullptr;
+        bool AddSeparatorBefore = false;
     };
 
     // Make sure this follows the construct-on-first-use idiom for MenuNode,
@@ -78,6 +80,11 @@ namespace
 
     void RenderMenuNodeAndChildren(const MenuNode& Node)
     {
+        if (Node.AddSeparatorBefore)
+        {
+            ImGui::Separator();
+        }
+
         if (Node.Children.empty())
         {
             if (ImGui::MenuItem(Node.Name.c_str(), Node.Shortcut.c_str(), Node.IsSelected))
@@ -137,10 +144,18 @@ bool ImGuiUtil_AddMenuItem(const std::string& Path, const ImGuiKeyChord& Shortcu
     for (const std::string_view& MenuItem : SplitPath)
     {
         auto Params = MenuItem | std::views::split("@"sv) | AsStringView | ToVector;
+        bool AddSeparator = false;
+
+        if (Params[0][0] == '|')
+        {
+            Params[0] = Params[0].substr(1);
+            AddSeparator = true;
+        }
 
         std::int32_t Priority = std::numeric_limits<std::int32_t>::max();
         Params.size() > 1 && StringToNumber(Params.back(), Priority);
         MenuNode& Node = FindOrAddMenuNode(Params[0], Priority, Parent);
+        Node.AddSeparatorBefore = AddSeparator;
 
         if (&SplitPath.back() == &MenuItem)
         {
@@ -247,3 +262,19 @@ void ImGuiUtil_OpenModalFileDialog(const std::string& Title, const std::string& 
     FileDialogIdAndCallback[Key] = Callback;
 }
 
+bool ImGuiUtil_ComboAutoWidth(const char* Label, int* CurrentItem, const char* ItemsZeroSep, const int HeightItems)
+{
+    const ImGuiStyle& Style = ImGui::GetStyle();
+    float MaxTextWidth = 0.0f;
+
+    for (const char* Item = ItemsZeroSep; *Item; )
+    {
+        MaxTextWidth = ImMax(MaxTextWidth, ImGui::CalcTextSize(Item).x);
+        Item += std::strlen(Item) + 1;
+    }
+
+    ImGui::PushItemWidth(MaxTextWidth + Style.FramePadding.x * 2 + ImGui::GetFrameHeight());
+    const bool Changed = ImGui::Combo(Label, CurrentItem, ItemsZeroSep, HeightItems);
+    ImGui::PopItemWidth();
+    return Changed;
+}
