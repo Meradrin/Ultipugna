@@ -10,12 +10,14 @@
 
 UIManager UIManager::Instance;
 
-void UIManager::Initialize()
+bool UIManager::Initialize()
 {
     AddWindow<RenderWindow>(0);
     AddWindow<LogWindow>();
     AddWindow<MemoryViewerWindow>();
     AddWindow<TileViewerWindow>();
+
+    return true;
 }
 
 void UIManager::Render()

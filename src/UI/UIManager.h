@@ -13,7 +13,7 @@ public:
 
     static UIManager& Get() { return Instance; }
 
-    void Initialize();
+    bool Initialize();
     void Render();
     void Stop();
 

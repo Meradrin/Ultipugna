@@ -42,7 +42,7 @@ namespace
 
         std::vector<MenuNode>& Nodes = (Parent ? Parent->Children : GetMenuNodes());
 
-        if (const auto ItByName = std::ranges::find(Nodes, Name, &MenuNode::Name); ItByName != Nodes.end())
+        if (auto ItByName = std::ranges::find(Nodes, Name, &MenuNode::Name); ItByName != Nodes.end())
         {
             if (ItByName->Priority > Priority)
             {
@@ -50,6 +50,7 @@ namespace
                 Temp.Priority = Priority;
                 Nodes.erase(ItByName);
                 Nodes.insert(std::ranges::lower_bound(Nodes, Temp, MenuLess), std::move(Temp));
+                ItByName = std::ranges::find(Nodes, Name, &MenuNode::Name);
             }
             return *ItByName;
         }
